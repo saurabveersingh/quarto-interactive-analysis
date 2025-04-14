@@ -78,11 +78,15 @@ erDiagram
 
 ## Libraries Used:
 
+@ggmap
+
 ```{r}
 library(dplyr)
 library(ggplot2)
 library(psych)
 library(plotly)
+library(ggmap)
+library(leaflet)
 ```
 
 ## Descriptive Analysis
@@ -202,3 +206,36 @@ ggplotly(p5)
 ```
 
 It can be observed that the distribution is right-skewed, indicating that most orders have lower total values, with a few high-value outliers. This pattern suggests that while smaller orders are more common, there are occasional large orders that significantly increase the total sales. Understanding this distribution can help in inventory management, pricing strategies, and identifying key customer segments.
+
+### Geographical data analysis
+
+This analysis visualizes customer distribution globally, highlighting key regions with high customer density. By mapping these locations, businesses can identify strategic areas for marketing and logistics. This geographical insight aids in optimizing resource allocation and enhancing customer engagement strategies.
+
+Notes:
+
+1\) The API call will fail if you do not have a valid api key by the name "GOOGLE_API_KEY" in your environment file. The environment file by the name "Renviron" is added to .gitignore and will not be uploaded to github for security reasons.
+
+2\) The following script does not use the datasets described above due to lack of proper addresses in synthetic data but instead uses Dummy data to showcase analytical proficiency.
+
+3\) The addresses listed in this dummy data are randomly obtained using keywords like "Park" or "Garden" to avoid pinpointing real residential addresses.
+
+```{r}
+# Dummy data
+customer_data <- data.frame(
+  CustomerID = c(2301, 2302, 2303),
+  CustomerName = c("Flor Stone", "Lavera Emerson", "Fern Head"),
+  CustomerAddress = c("1600 Amphitheatre Parkway, Mountain View, California, USA", "Park Street, Mullick Bazar, Beniapukur, Calcutta, West Bengal, India", "Garden 8, Salah El Din Abdel Karim, New Cairo 1, Egypt")
+)
+
+# Register Google API key for geocoding
+register_google(key = Sys.getenv("GOOGLE_API_KEY"))
+
+# Geocode addresses
+geocoded_data <- customer_data %>%
+  mutate_geocode(CustomerAddress)
+
+# Create an interactive leaflet map
+leaflet(data = geocoded_data) %>%
+  addTiles() %>%
+  addMarkers(~lon, ~lat, popup = ~paste(CustomerName, "<br>", CustomerAddress))
+```
