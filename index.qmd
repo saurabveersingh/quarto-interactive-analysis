@@ -32,3 +32,173 @@ for (file in csv_files) {
   cat(file_name, ":", paste(column_names, collapse = ", "), "\n")
 }
 ```
+
+## **Depict data streams using Mermaid**
+
+```{mermaid}
+erDiagram
+    CUSTOMER {
+        int CustomerID PK
+        string CustomerName
+        string CustomerEmail
+        string CustomerPhone
+        string CustomerAddress
+        float CustomerCreditLimit
+    }
+    
+    ORDERDETAILS {
+        int OrderDetailsID PK
+        int ProductID FK
+        int OrderItemQuantity
+        float PerUnitPrice
+        string OrderStatus
+        int OrderID FK
+    }
+    
+    ORDERS {
+        int OrderID PK
+        date OrderDate
+        int CustomerID FK
+    }
+    
+    PRODUCT {
+        int ProductID PK
+        string ProductName
+        string CategoryName
+        string ProductDescription
+        float ProductStandardCost
+        float ProductListPrice
+        float Profit
+    }
+    
+    ORDERS }|--|| CUSTOMER : has
+    ORDERDETAILS ||--|| ORDERS : contains
+    ORDERDETAILS }|--|| PRODUCT : includes
+```
+
+## Libraries Used:
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(psych)
+library(plotly)
+```
+
+## Descriptive Analysis
+
+First lets explore the Mean, Median, Standard Deviation, Minimum Value and Maximum Value of all numerical attributes within these datasets.
+
+```{r}
+# Load datasets
+datasets <- list(
+  customer = read.csv("input/customer.csv"),
+  orders = read.csv("input/orders.csv"),
+  orderdetails = read.csv("input/orderdetails.csv"),
+  product = read.csv("input/product.csv")
+)
+
+# Compute summary statistics for numerical variables in each dataset
+summary_stats <- lapply(datasets, function(df) {
+  df %>% reframe(across(where(is.numeric), \(x) list(
+    mean = mean(x, na.rm = TRUE),
+    median = median(x, na.rm = TRUE),
+    sd = sd(x, na.rm = TRUE),
+    min = min(x, na.rm = TRUE),
+    max = max(x, na.rm = TRUE)
+  )))
+})
+
+# Print summary statistics
+summary_stats
+```
+
+This initial overview not only aids in assessing data quality but also lays the foundation for subsequent detailed analyses and visualizations, enabling you to make data-driven decisions with confidence.
+
+Now lets gain deeper insights such as order frequency over the years and profit distribution by category.
+
+```{r}
+# Ensure OrderDate is in Date format
+datasets$orders$OrderDate <- as.Date(datasets$orders$OrderDate)
+
+# Interactive Histogram of Order Frequency Over Time
+p1 <- ggplot(datasets$orders, aes(x = OrderDate)) +
+  geom_histogram(binwidth = 30, fill = "blue", alpha = 0.5) +
+  labs(title = "Order Frequency Over Time", x = "Order Date", y = "Count")
+
+ggplotly(p1)
+
+# Interactive Boxplots for Profit by Category
+p2 <- ggplot(datasets$product, aes(x = CategoryName, y = Profit)) +
+  geom_boxplot(fill = "orange", alpha = 0.7) +
+  labs(title = "Profit Distribution by Category", x = "Category", y = "Profit") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplotly(p2)
+```
+
+The histogram reveals an increase in order frequency starting around 2016, peaking in 2017. This trend suggests growing demand or successful marketing efforts during this period. Meanwhile, the box plot highlights that categories like CPUs and Video Cards have higher median profits and more variability, while Mother Boards show lower and more consistent profits.
+
+Now, by joining the orders, orderdetails, and product datasets, we can calculate the total revenue for each customer.
+
+```{r}
+# Join orders with orderdetails
+orders_details_joined <- merge(datasets$orders, datasets$orderdetails, by = "OrderID")
+
+# Join the result with the product dataset to get pricing information
+orders_full <- merge(orders_details_joined, datasets$product, by = "ProductID")
+
+# Calculate total sales per order detail (quantity * per unit price)
+orders_full$Sales <- orders_full$OrderItemQuantity * orders_full$PerUnitPrice
+
+# Aggregate total sales per customer
+customer_sales <- orders_full %>%
+  group_by(CustomerID) %>%
+  summarise(TotalSales = sum(Sales, na.rm = TRUE))
+
+# Interactive Bar chart displaying top 10 customers by sales
+top_customers <- customer_sales %>% arrange(desc(TotalSales)) %>% head(10)
+p3 <- ggplot(top_customers, aes(x = reorder(as.factor(CustomerID), TotalSales), y = TotalSales)) +
+  geom_bar(stat = "identity", fill = "#008080", alpha = 0.8) +
+  labs(title = "Top 10 Customers by Total Sales", x = "Customer ID", y = "Total Sales") +
+  coord_flip() +
+  scale_y_continuous(labels = scales::comma)
+
+ggplotly(p3)
+```
+
+This analysis helps identify the top customers. This can help compare spendings or Identify award winners for promotional campaigns.
+
+A scatter plot can help understand differences in pricing strategy across categories, analyzing the relationship between product cost, list price, and profit
+
+```{r}
+# Interactive Scatterplot comparing list price to standard cost
+p4 <- ggplot(datasets$product, aes(x = ProductStandardCost, y = ProductListPrice, color = CategoryName)) +
+  geom_point(size = 3, alpha = 0.7) +
+  geom_smooth(method = "lm", se = FALSE, linetype = "dashed") +
+  labs(title = "Product Cost vs. List Price by Category", x = "Product Standard Cost", y = "Product List Price") +
+  theme_minimal()
+
+ggplotly(p4)
+```
+
+Each point on this scatter plot represents a product, with its position indicating its cost and list price. The color coding helps differentiate product categories. The dashed line suggests a linear relationship, indicating that as the standard cost increases, the list price tends to increase proportionally. This pattern can help assess pricing strategies and profit margins across different product categories. The clustering of points at lower cost and price levels suggests that most products are priced within a similar range, with a few outliers at higher values.
+
+Computing the total value of each order by aggregating the order details, will help assess the patterns in order size and frequency.
+
+```{r}
+# Aggregate total order value for each OrderID
+order_value <- orders_full %>%
+  group_by(OrderID) %>%
+  summarise(TotalOrderValue = sum(Sales, na.rm = TRUE))
+
+# Interactive Distribution of total order values
+p5 <- ggplot(order_value, aes(x = TotalOrderValue)) +
+  geom_histogram(fill = "darkgreen", bins = 30, alpha = 0.6) +
+  labs(title = "Distribution of Total Order Value", x = "Total Order Value", y = "Frequency") +
+  scale_x_continuous(labels = scales::comma)
+
+ggplotly(p5)
+```
+
+It can be observed that the distribution is right-skewed, indicating that most orders have lower total values, with a few high-value outliers. This pattern suggests that while smaller orders are more common, there are occasional large orders that significantly increase the total sales. Understanding this distribution can help in inventory management, pricing strategies, and identifying key customer segments.
