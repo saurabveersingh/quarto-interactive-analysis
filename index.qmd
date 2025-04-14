@@ -1,5 +1,5 @@
 ---
-title: "Assignment 2"
+title: "Quarto Interactive Analysis"
 format: html
 bibliography: references.bib
 execute:
@@ -87,6 +87,9 @@ library(psych)
 library(plotly)
 library(ggmap)
 library(leaflet)
+library(mgcv)
+library(gratia)
+library(forecast)
 ```
 
 ## Descriptive Analysis
@@ -239,3 +242,117 @@ leaflet(data = geocoded_data) %>%
   addTiles() %>%
   addMarkers(~lon, ~lat, popup = ~paste(CustomerName, "<br>", CustomerAddress))
 ```
+
+## Inferential Analysis
+
+Now that we have gained a deep understanding of the datasets, we can perform various Inferential Analysis to explore relationships, test hypotheses, and make predictions based on the data.
+
+Let's start with a generalized linear model to explore relationship between product pricing factors and profit.
+
+```{r}
+# Using the product dataset
+model_glm <- glm(Profit ~ ProductStandardCost + ProductListPrice, 
+                 data = datasets$product,
+                 family = gaussian())
+
+# Display model summary and coefficients
+summary(model_glm)
+```
+
+This GLM output confirms a direct and almost deterministic relationship between product pricing and profit within the dataset. The near-perfect coefficients of -1 for cost and +1 for list price define profit as the difference between the selling price and cost, leaving little room for external factors. This demonstrates a clear, interpretable, data-driven relationship, making it an ideal baseline model for further inferential analysis.
+
+```{r}
+# Show predictions from the GLM model in an interactive Scatter Plot
+datasets$product$glm_pred <- predict(model_glm, newdata = datasets$product)
+
+p_glm <- ggplot(datasets$product, aes(x = Profit, y = glm_pred)) +
+  geom_point(alpha = 0.7, color = "#2E86AB") +
+  geom_abline(intercept = 0, slope = 1, color = "red", linetype = "dashed") +
+  labs(title = "Observed vs. Predicted Profit (GLM)",
+       x = "Observed Profit",
+       y = "Predicted Profit") +
+  theme_minimal()
+
+ggplotly(p_glm)
+```
+
+The plot visually confirms the GLM's strong predictive performance, as the predicted profits closely match the observed profits across the dataset. This indicates that the model is well-suited for understanding and predicting profit based on the pricing data provided.
+
+Let's demonstrate how Generalized Additive Model (GAM) achieves the same result.
+
+```{r}
+# Fit the GAM model to capture potential nonlinear effects on profit
+model_gam <- gam(Profit ~ s(ProductStandardCost) + s(ProductListPrice), 
+                 data = datasets$product, 
+                 family = gaussian())
+
+# Summarize the GAM model results
+summary(model_gam)
+
+# Create interactive visualizations of each smooth term using gratia to generate ggplot objects  
+# Smooth effect of ProductStandardCost
+plot_smooth_stdcost <- draw(model_gam, select = 1) +
+  labs(title = "Smooth Effect of Product Standard Cost", x = "Product Standard Cost", y = "Smooth Estimate") +
+  theme_minimal()
+
+# Smooth effect of ProductListPrice
+plot_smooth_listprice <- draw(model_gam, select = 2) +
+  labs(title = "Smooth Effect of Product List Price", x = "Product List Price", y = "Smooth Estimate") +
+  theme_minimal()
+
+# Convert the ggplot objects to interactive plotly objects
+interactive_smooth_stdcost <- ggplotly(plot_smooth_stdcost)
+interactive_smooth_listprice <- ggplotly(plot_smooth_listprice)
+
+# Display interactive plots
+interactive_smooth_stdcost
+interactive_smooth_listprice
+```
+
+Now let's apply these findings to make a time series forecast of order frequency
+
+```{r}
+# Aggregate monthly order counts from the orders dataset
+order_counts <- datasets$orders %>%
+  group_by(Month = as.Date(cut(OrderDate, breaks = "month"))) %>%
+  summarise(OrderCount = n())
+
+# Create a time series object (assuming monthly intervals)
+order_ts <- ts(order_counts$OrderCount, frequency = 12,
+               start = c(as.numeric(format(min(order_counts$Month), "%Y")),
+                         as.numeric(format(min(order_counts$Month), "%m"))))
+
+# Fit an ARIMA model and forecast the next 12 months
+fit_arima <- auto.arima(order_ts)
+forecast_result <- forecast(fit_arima, h = 12)
+
+# Extract forecast data
+forecast_df <- data.frame(
+  Date = seq(as.Date(max(order_counts$Month)) + 1, by = "month", length.out = 12),
+  Forecast = forecast_result$mean,
+  Lower = forecast_result$lower[, 2],
+  Upper = forecast_result$upper[, 2]
+)
+
+# Combine historical and forecast data to create a custom plot
+combined_df <- rbind(
+  data.frame(Date = order_counts$Month, OrderCount = order_counts$OrderCount, Type = "Historical"),
+  data.frame(Date = forecast_df$Date, OrderCount = forecast_df$Forecast, Type = "Forecast")
+)
+
+# Create the custom plot
+p_custom <- ggplot() +
+  geom_line(data = combined_df, aes(x = Date, y = OrderCount, color = Type)) +
+  geom_ribbon(data = forecast_df, aes(x = Date, ymin = Lower, ymax = Upper), alpha = 0.2, fill = "blue") +
+  labs(title = "Forecast of Monthly Order Frequency", x = "Year", y = "Order Count") +
+  theme_minimal()
+
+# Convert the custom plot into an interactive visualisation
+ggplotly(p_custom)
+```
+
+This plot provides a comprehensive view of past order trends and future expectations. The forecasted stability might suggest a period of consistent demand, but the confidence interval indicates potential variability. This information can be valuable for planning inventory, marketing strategies, and resource allocation.
+
+## Conclusion
+
+This analysis showcases the effectiveness of Quarto Markdown (QMD) and R in business analytics. Through interactive visualizations and advanced modeling, we demonstrated how these tools can uncover insights from complex datasets. The seamless integration of data exploration, statistical analysis, and forecasting illustrates the potential of QMD and R to enhance decision-making processes, providing a comprehensive framework for strategic business insights.
