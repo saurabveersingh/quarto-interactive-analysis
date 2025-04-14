@@ -1,0 +1,34 @@
+---
+title: "Assignment 2"
+format: html
+bibliography: references.bib
+execute:
+  warning: false
+  message: false
+---
+
+## About the Dataset
+
+**Source:** @kaggle/harshadashirin
+
+These datasets sourced from kaggle are synthetic but they closely mimic realworld data, suitable to demonstrate the application of advanced analytical techniques. Out of seven datasets available, only four have been included in this analysis since the other three datasets did not have a direct relationship with the datasets used in this analysis.
+
+Here's a list of datasets and the columns within each dataset:
+
+```{r}
+#| echo: false
+
+# Set the base path to the input folder
+input_path <- "input/"
+
+# Get a list of CSV files in the input folder
+csv_files <- list.files(input_path, pattern = "\\.csv$", full.names = TRUE)
+
+# Iterate over each file and print the filename and column names
+for (file in csv_files) {
+  data <- read.csv(file, header = TRUE)
+  column_names <- colnames(data)
+  file_name <- basename(file)
+  cat(file_name, ":", paste(column_names, collapse = ", "), "\n")
+}
+```
